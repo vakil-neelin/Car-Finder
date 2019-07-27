@@ -8,12 +8,18 @@ from selenium.webdriver.chrome.options import Options
 from time import sleep
 import os
 import ConfigParser
+import requests
+import datetime
+from report_generator import Report_Generator
 
 class CarFinder:
 
     def __init__(self):
         # Reads in the list of vehicles
         self.car_list = self.read_in_config()
+
+        # Creates the report
+        self.report = Report_Generator()
 
         return
 
@@ -182,14 +188,61 @@ class CarFinder:
         for vehicle in self.car_list:
             chrome_driver = self.start_chrome_driver()
             self.search_for_vehicle(chrome_driver, vehicle)
+            self.find_results(chrome_driver)
+            sleep(5)
+        return
+
+    def get_image_summary(self, link, car_name):
+
+        summary = ""
+
+        # Loads the chromedriver from the local directory
+        chromedriver_location = os.path.realpath("chromedriver")
+        options = webdriver.ChromeOptions()
+        options.add_argument('--headless')
+
+        # this open up a blank useable automated chrome window
+        driver = webdriver.Chrome(executable_path=chromedriver_location, chrome_options=options)
+        # Goes to the Local Craiglist vehicle page
+        driver.get(str(link))
+
+        img_path = driver.find_element(By.CLASS_NAME, 'gallery').find_element(By.CLASS_NAME, 'swipe').find_element(By.CLASS_NAME, 'swipe-wrap').find_element(By.TAG_NAME, 'img').get_attribute('src')
+
+        # download the url contents in binary format
+        r = requests.get(img_path)
+        # open method to open a file on your system and write the contents
+        with open("Images/" + str(car_name) + ".png", "wb") as code:
+            code.write(r.content)
+
+        summary = driver.find_element(By.ID, 'postingbody').text
+
+        print summary
+        driver.close()
+
+        return summary
+
+    def find_results(self, driver):
+        results_table = driver.find_element(By.XPATH, '//*[@id="sortable-results"]/ul')
+        # time.sleep(10)
+
+        results = results_table.find_elements(By.TAG_NAME, "li")
+        print "Number of Results"
+        print len(results)
+
+        for cars in results:
+            car_name = cars.find_element(By.CLASS_NAME, "result-info").find_element_by_tag_name('a').text
+            car_price = cars.find_element(By.CLASS_NAME, "result-info").find_element(By.CLASS_NAME, "result-meta").find_element(By.CLASS_NAME, "result-price").text
+            specific_car_link = cars.find_element(By.TAG_NAME, "a").get_attribute("href")
+            summary = self.get_image_summary(specific_car_link, car_name)
+
+            self.report.add_table(car_name, car_price, summary)
+
+        self.report.make_report()
 
         return
 
-
 c = CarFinder()
 c.search_all_vehicles()
-
-
 
 # sleep(1)
 # elem = driver.find_element_by_id('searchBox')
